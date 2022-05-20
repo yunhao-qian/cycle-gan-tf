@@ -208,9 +208,13 @@ def n_layer_discriminator(
 
 class ImagePool(layers.Layer):
     """
-    `ImagePool` is a helper class that shuffles the images passing through it.
-    On each call, it takes an image patch of shape `(N, H, W, C)` as input and
-    returns a shuffled image patch of the same shape.
+    `ImagePool` is a helper class that shuffles the images that pass through
+    it. On each call, it takes an image patch of shape `(N, H, W, C)` as input
+    and returns a shuffled image patch of the same shape.
+
+    Applying an image pool on input images to a discriminator can improve
+    training stability, see Section 2.3 of
+    https://arxiv.org/pdf/1612.07828.pdf for a detailed explanation.
     """
 
     def __init__(self, capacity: int = 50):
@@ -826,7 +830,7 @@ def preprocess_datasets(
         test_b: tf.data.Dataset,
         load_size: Tuple[int, int] = (286, 286),
         crop_size: Tuple[int, int] = (256, 256),
-):
+) -> Tuple[tf.data.Dataset, tf.data.Dataset]:
     """
     Preprocesses image datasets so that images can be fed into a CycleGAN
     model.
@@ -835,7 +839,7 @@ def preprocess_datasets(
     "image" mapped to an uint8 tensor of shape `(H, W, C)`. An output dataset,
     on each iteration, returns a pair of float32 tensors of shape `(H, W, C)`
     from domain A and B respectively, where pixel values of output tensors are
-    scaled into [-1, 1].
+    scaled into (-1, 1).
 
     Size of an input image is first rescaled into `load_size` (in which the
     aspect ratio is not respected), and then randomly cropped into
