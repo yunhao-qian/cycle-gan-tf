@@ -90,6 +90,23 @@ def resnet_generator(
         res_blocks: int = 9,
         res_padding_mode: Literal['zeros', 'reflect', 'replicate'] = 'zeros',
 ) -> keras.Model:
+    """
+    Creates a ResNet generator model.
+
+    :param in_channels: number of channels of an input image
+    :param out_channels: number of channels of an output image
+    :param conv_filters: number of filters in the first convolutional layer
+    :param norm_mode: type of normalization applied after convolutional layers
+    :param res_use_dropout: whether a dropout layer is added between two
+        convolutional layers of a ResNet block
+    :param res_blocks: number of ResNet blocks
+    :param res_padding_mode: padding mode of the convolutional layers of a
+        ResNet block
+    :return: Resnet generator model that takes an image batch of shape
+        `(N, H, W, C_in)` as input and returns an image batch of shape
+        `(N, H, W, C_out)` as output
+    """
+
     conv_use_bias = norm_mode != 'batch'
     inputs = keras.Input(shape=(None, None, in_channels))
 
@@ -142,6 +159,21 @@ def n_layer_discriminator(
         conv_layers: int = 3,
         norm_mode: Literal['batch', 'instance', 'none'] = 'instance',
 ) -> keras.Model:
+    """
+    Creates a PatchGAN discriminator model.
+
+    :param in_channels: number of channels of an input image
+    :param conv_filters: number of filters in the first convolutional layer
+    :param conv_layers: number of downsampling convolutional layers, which
+        does not take into account the final convolutional layer that has a
+        unitary stride and squeezes the number of channels to one
+    :param norm_mode: type of normalization applied after convolutional layers
+        except for the first and the last ones
+    :return: PatchGAN discriminator model that takes an image batch of shape
+        `(N, H_in, W_in, C_in)` as input and returns a probability batch of
+        shape `(N, H_out, W_out, 1)` as output
+    """
+
     conv_use_bias = norm_mode != 'batch'
     inputs = keras.Input(shape=(None, None, in_channels))
     h = layers.Conv2D(
@@ -175,7 +207,20 @@ def n_layer_discriminator(
 
 
 class ImagePool(layers.Layer):
+    """
+    `ImagePool` is a helper class that shuffles the images passing through it.
+    On each call, it takes an image patch of shape `(N, H, W, C)` as input and
+    returns a shuffled image patch of the same shape.
+    """
+
     def __init__(self, capacity: int = 50):
+        """
+        Creates an image pool.
+
+        :param capacity: maximum number of images that can be buffered in the
+        pool, where a larger capacity leads to shuffling of better quality
+        """
+
         super().__init__()
         self.capacity = tf.constant(capacity)
         self.pool = None
@@ -248,6 +293,15 @@ def _save_tensor_as_image(tensor: tf.Tensor, filename: str) -> None:
 
 
 class CycleGANModel(keras.Model):
+    """
+    This class represents a CycleGAN model.
+
+    An instance of this class maintains discriminators, generators,
+    optimizers, loss functions, and average losses in a training epoch. It can
+    either be created from parameters using `CycleGANModel.new()` or loaded
+    from saved weights using `keras.Model.load_weights()`.
+    """
+
     def __init__(
             self,
             discriminator_a: keras.Model,
@@ -255,6 +309,15 @@ class CycleGANModel(keras.Model):
             generator_ab: keras.Model,
             generator_ba: keras.Model,
     ):
+        """
+        Creates a CycleGAN model from the given discriminators and generators.
+
+        :param discriminator_a: discriminator of domain A
+        :param discriminator_b: discriminator of domain A
+        :param generator_ab: generator from domain A to domain B
+        :param generator_ba: generator from domain B to domain A
+        """
+
         super().__init__()
         self.discriminator_a = discriminator_a
         self.discriminator_b = discriminator_b
@@ -289,6 +352,28 @@ class CycleGANModel(keras.Model):
                 'replicate',
             ] = 'zeros',
     ):
+        """
+        Creates a CycleGAN model whose discriminators and generators are
+        constructed from the given parameters.
+
+        :param a_channels: number of channels of an image in domain A
+        :param b_channels: number of channels of an image in domain B
+        :param norm_mode: normalization mode after convolutional layers in
+            discriminators and generators
+        :param d_conv_filters: number of filters in the first convolutional
+            layer of a discriminator
+        :param d_conv_layers: number of downsampling convolutional layers
+            (except for the last one) in a discriminator
+        :param g_conv_filters: number of filters in the first convolutional
+            layer of a generator
+        :param g_res_use_dropout: whether a dropout layer is added between two
+            convolutional layers of a ResNet block in a generator
+        :param g_res_blocks: number of ResNet blocks in a generator
+        :param g_res_padding_mode: padding mode of the convolutional layers of
+            a ResNet block in a generator
+        :return: CycleGAN model
+        """
+
         discriminator_a = n_layer_discriminator(
             a_channels,
             d_conv_filters,
@@ -340,6 +425,22 @@ class CycleGANModel(keras.Model):
             lambda_identity: float = 0.5,
             gan_loss_mode: Literal['lsgan', 'vanilla', 'wgangp'] = 'lsgan',
     ) -> None:
+        """
+        Compiles loss functions, optimizers, and image pools from the given
+        parameters.
+
+        :param learning_rate: learning rate for Adam optimizers
+        :param adam_beta_1: beta_1 value for Adam optimizers
+        :param pool_capacity: capacity of fake image pools
+        :param lambda_a: weight of cycle losses with respect to GAN losses for
+            domain A
+        :param lambda_b: weight of cycle losses with respect to GAN losses for
+            domain B
+        :param lambda_identity: weight of identity losses with respect to
+            cycle losses
+        :param gan_loss_mode: loss function used for GAN losses
+        """
+
         super().compile()
         self.optimizer_d = keras.optimizers.Adam(learning_rate, adam_beta_1)
         self.optimizer_g = keras.optimizers.Adam(learning_rate, adam_beta_1)
@@ -525,6 +626,17 @@ class CycleGANModel(keras.Model):
             folder: str,
             examples: Optional[Tuple[tf.Tensor, tf.Tensor]] = None,
     ) -> None:
+        """
+        Save a model checkpoint in the given folder. This includes model
+        weights, a JSON file containing average losses, and if example images
+        are passed in as input, example output images from generators.
+
+        :param folder: name of the folder to save the checkpoint in
+        :param examples: optional pair of real images of shape `(H, W, C)`
+            from domain A and B respectively, which are used to generate
+            example output images from generators
+        """
+
         os.makedirs(folder, exist_ok=True)
 
         self.save_weights(os.path.join(folder, 'cycle_gan'))
@@ -565,6 +677,17 @@ class CycleGANModel(keras.Model):
 def linear_lr_schedule(
         epochs_decay: int,
 ) -> Callable[[int, float, int], float]:
+    """
+    Creates a linear learning-rate schedule. In this schedule, the learning
+    rate is constant in the beginning epochs and decays linearly to zero in
+    the last `epochs_decay` epochs.
+
+    :param epochs_decay: number of epochs in which the learning rate is
+        decaying
+    :return: callable that takes `(epoch, lr, num_epochs)` as input and
+        returns the updated learning rate as output
+    """
+
     def schedule(epoch: int, lr: float, epochs: int) -> float:
         if epochs - epochs_decay < epoch < epochs:
             return lr * ((epochs - epoch) / (epochs - epoch + 1))
@@ -577,6 +700,17 @@ def step_lr_schedule(
         step_size: int,
         gamma: float = 0.1,
 ) -> Callable[[int, float, int], float]:
+    """
+    Creates a step learning-rate schedule. In this schedule, the learning rate
+    decays by a factor of `gamma` for every `step_size` epochs.
+
+    :param step_size: number of epochs by which a decay in learning rate
+        happens
+    :param gamma: decay factor of the learning rate
+    :return: callable that takes `(epoch, lr, num_epochs)` as input and
+        returns the updated learning rate as output
+    """
+
     def schedule(epoch: int, lr: float, _: int) -> float:
         if epoch != 0 and epoch % step_size == 0:
             return lr * gamma
@@ -586,6 +720,14 @@ def step_lr_schedule(
 
 
 def cosine_annealing_lr_schedule() -> Callable[[int, float, int], float]:
+    """
+    Creates a cosine-annealing learning rate schedule. In this schedule, the
+    learning rate decays to zero following a cosine-shaped path.
+
+    :return: callable that takes `(epoch, lr, num_epochs)` as input and
+        returns the updated learning rate as output
+    """
+
     def schedule(epoch: int, lr: float, epochs: int) -> float:
         if 0 < epoch < epochs:
             return lr * (1 + np.cos(np.pi * (epoch / epochs))) / \
@@ -596,7 +738,19 @@ def cosine_annealing_lr_schedule() -> Callable[[int, float, int], float]:
 
 
 class LearningRateScheduler(keras.callbacks.Callback):
+    """
+    This class is a Keras callback that schedules learning-rate updates at the
+    beginning of every epoch.
+    """
+
     def __init__(self, schedule: Callable[[int, float, int], float]):
+        """
+        Creates a learning rate scheduler.
+
+        :param schedule: callable that takes `(epoch, lr, num_epochs)` as
+            input and returns the updated learning rate as output
+        """
+
         super().__init__()
         self.schedule = schedule
 
@@ -618,11 +772,26 @@ class LearningRateScheduler(keras.callbacks.Callback):
 
 
 class ModelCheckpoint(keras.callbacks.Callback):
+    """
+    This class is a Keras callback that saves a checkpoint of the model at the
+    end of every epoch.
+    """
+
     def __init__(
             self,
             folder: str,
             validation_data: Optional[tf.data.Dataset] = None,
     ):
+        """
+        Creates a model checkpoint callback.
+
+        :param folder: name of the folder to save checkpoints in
+        :param validation_data: optional dataset that, on each iteration,
+        returns a pair of real images of shape `(H, W, C)` from domain A and B
+        respectively, which is used to generate example output images from
+        generators
+        """
+
         super().__init__()
         self.folder = folder
         self.validation_data = validation_data
@@ -658,6 +827,29 @@ def preprocess_datasets(
         load_size: Tuple[int, int] = (286, 286),
         crop_size: Tuple[int, int] = (256, 256),
 ):
+    """
+    Preprocesses image datasets so that images can be fed into a CycleGAN
+    model.
+
+    An input dataset, on each iteration, returns a dictionary with key
+    "image" mapped to an uint8 tensor of shape `(H, W, C)`. An output dataset,
+    on each iteration, returns a pair of float32 tensors of shape `(H, W, C)`
+    from domain A and B respectively, where pixel values of output tensors are
+    scaled into [-1, 1].
+
+    Size of an input image is first rescaled into `load_size` (in which the
+    aspect ratio is not respected), and then randomly cropped into
+    `crop_size`.
+
+    :param train_a: training set of domain A
+    :param train_b: training set of domain B
+    :param test_a: test set of domain A
+    :param test_b: test set of domain B
+    :param load_size: size that an original image is rescaled into
+    :param crop_size: size that a rescaled image is randomly cropped into
+    :return: tuple of the training set and the test set
+    """
+
     transform = functools.partial(
         _transform_dataset,
         load_size=load_size,
